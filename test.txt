@@ -7,3 +7,5 @@ squash me
 squash me more
 
 rebase me
+
+rebase me more
