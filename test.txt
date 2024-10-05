@@ -5,3 +5,5 @@ add more stuff
 squash me
 
 squash me more
+
+rebase me
