@@ -53,11 +53,11 @@ variable "versioning_config" {
   }
 }
 
-variable "file_name_zip" {
-  default     = "../code/lambda_function.zip"
-  description = "File Name in Zip"
-  type        = string
-}
+# variable "file_name_zip" {
+#   default     = "../code/lambda_function.zip"
+#   description = "File Name in Zip"
+#   type        = string
+# }
 variable "lambda_function_vpc_subnet_list" {
   description = "List of subnet ids when Lambda Function should run in the VPC. Usually private or intra subnets."
   type        = list(string)
