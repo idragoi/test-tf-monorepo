@@ -12,7 +12,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, closed]
     branches:
-      - 'Features/**'
+      - 'main'
 
 jobs:
   detect:
@@ -74,115 +74,115 @@ jobs:
               include: directories.map(directory => ({ directory })),
             };
 
-validate:
-    needs: detect
-    if: ${{ needs.detect.outputs.directories != '{}' && github.event.action != 'closed' }}
-    strategy:
-      matrix: "${{ fromJson(needs.detect.outputs.directories) }}"
-      fail-fast: false
-    uses: ./.github/workflows/reusable-validate.yaml
-    with:
-      terraformVersion: ${{ env.tfVer }}
-      moduleRootDirectory: ${{ matrix.directory }}
-    secrets:
-      appId: ${{ secrets.appId }}
-      appPrivateKey: ${{ secrets.appPrivateKey }}
+  validate:
+      needs: detect
+      if: ${{ needs.detect.outputs.directories != '{}' && github.event.action != 'closed' }}
+      strategy:
+        matrix: "${{ fromJson(needs.detect.outputs.directories) }}"
+        fail-fast: false
+      uses: ./.github/workflows/reusable-validate.yaml
+      with:
+        terraformVersion: ${{ env.tfVer }}
+        moduleRootDirectory: ${{ matrix.directory }}
+      secrets:
+        appId: ${{ secrets.appId }}
+        appPrivateKey: ${{ secrets.appPrivateKey }}
 
-lint:
-    needs: detect
-    if: ${{ needs.detect.outputs.directories != '{}' && github.event.action != 'closed' }}
-    strategy:
-      matrix: "${{ fromJson(needs.detect.outputs.directories) }}"
-      fail-fast: false
-    uses: ./.github/workflows/reusable-lint.yaml
-    with:
-      moduleRootDirectory: ${{ matrix.directory }}
-      tflintVersion: ${{ env.tflintVer }}
-    secrets:
-      githubToken: ${{ secrets.GITHUB_TOKEN }}
+  lint:
+      needs: detect
+      if: ${{ needs.detect.outputs.directories != '{}' && github.event.action != 'closed' }}
+      strategy:
+        matrix: "${{ fromJson(needs.detect.outputs.directories) }}"
+        fail-fast: false
+      uses: ./.github/workflows/reusable-lint.yaml
+      with:
+        moduleRootDirectory: ${{ matrix.directory }}
+        tflintVersion: ${{ env.tflintVer }}
+      secrets:
+        githubToken: ${{ secrets.GITHUB_TOKEN }}
 
-analysis:
-    needs: detect
-    if: ${{ needs.detect.outputs.directories != '{}' && github.event.action != 'closed' }}
-    strategy:
-      matrix: "${{ fromJson(needs.detect.outputs.directories) }}"
-      fail-fast: false
-    uses: ./.github/workflows/reusable-analysis.yaml
-    with:
-      moduleRootDirectory: ${{ matrix.directory }}
-    secrets:
-      githubToken: ${{ secrets.GITHUB_TOKEN }}
+  analysis:
+      needs: detect
+      if: ${{ needs.detect.outputs.directories != '{}' && github.event.action != 'closed' }}
+      strategy:
+        matrix: "${{ fromJson(needs.detect.outputs.directories) }}"
+        fail-fast: false
+      uses: ./.github/workflows/reusable-analysis.yaml
+      with:
+        moduleRootDirectory: ${{ matrix.directory }}
+      secrets:
+        githubToken: ${{ secrets.GITHUB_TOKEN }}
 
-plan:
-    needs: detect
-    if: ${{ needs.detect.outputs.directories != '{}' && ( needs.detect.outputs.is-merge-event == 'true' || github.event.action != 'closed' )}}
-    strategy:
-      matrix: "${{ fromJson(needs.detect.outputs.directories) }}"
-      fail-fast: false
-    uses: ./.github/workflows/reusable-plan.yaml
-    with:
-      moduleRootDirectory: ${{ matrix.directory }}
-      releaseType: ${{ needs.detect.outputs.release-type }}
-    secrets:
-      githubToken: ${{ secrets.GITHUB_TOKEN }}
+  plan:
+      needs: detect
+      if: ${{ needs.detect.outputs.directories != '{}' && ( needs.detect.outputs.is-merge-event == 'true' || github.event.action != 'closed' )}}
+      strategy:
+        matrix: "${{ fromJson(needs.detect.outputs.directories) }}"
+        fail-fast: false
+      uses: ./.github/workflows/reusable-plan.yaml
+      with:
+        moduleRootDirectory: ${{ matrix.directory }}
+        releaseType: ${{ needs.detect.outputs.release-type }}
+      secrets:
+        githubToken: ${{ secrets.GITHUB_TOKEN }}
 
-comment:
-    needs: [detect, plan]
-    if: github.event.action != 'closed'
-    runs-on: ubuntu-latest
-    name: 'Comment on PR'
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: outputs
+  comment:
+      needs: [detect, plan]
+      if: github.event.action != 'closed'
+      runs-on: ubuntu-latest
+      name: 'Comment on PR'
+      steps:
+        - uses: actions/download-artifact@v4
+          with:
+            path: outputs
 
-      - name: Display structure of downloaded files
-        run: ls -R
-        working-directory: outputs
+        - name: Display structure of downloaded files
+          run: ls -R
+          working-directory: outputs
 
-      - uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const { number: issue_number } = context.issue;
-            const { readdir, readFile } = require('fs').promises;
-            const utf8 = { encoding: 'utf-8' };
-            const lines = [
-              '# Release plan', '',
-              '| Directory | Previous version | New version |',
-              '|--|--|--|',
-            ];
-            const sections = [];
-            for (const folder of await readdir('outputs', { withFileTypes: true })) {
-              if (!folder.isDirectory()) continue;
-              const readText = (name) => readFile(name, utf8).then(x => x.trim());
-              lines.push('| '+[
-                `\`${folder.name}\``,
-                `${await readText(`outputs/${folder.name}/previous-version.txt`)}`,
-                `**${await readText(`outputs/${folder.name}/new-version.txt`)}**`,
-              ].join(' | ')+' |');
-              sections.push(`<details><summary>Changelog preview: ${folder.name}</summary>\n\n${await readText(`outputs/${folder.name}/changelog.md`)}\n</details>`);
-            }
-            const finalBody = [lines.join('\n'), ...sections].join('\n\n');
-            const {data: allComments} = await github.rest.issues.listComments({ issue_number, owner, repo });
-            const ourComments = allComments
-              .filter(comment => comment.user.login === 'github-actions[bot]')
-              .filter(comment => comment.body.startsWith(lines[0]+'\n'));
-            const latestComment = ourComments.slice(-1)[0];
-            if (latestComment && latestComment.body === finalBody) {
-              console.log('Existing comment is already up to date.');
-              return;
-            }
-            const {data: newComment} = await github.rest.issues.createComment({ issue_number, owner, repo, body: finalBody });
-            console.log('Posted comment', newComment.id, '@', newComment.html_url);
-            // Delete all our previous comments
-            for (const comment of ourComments) {
-              if (comment.id === newComment.id) continue;
-              console.log('Deleting previous PR comment from', comment.created_at);
-              await github.rest.issues.deleteComment({ comment_id: comment.id, owner, repo });
-            }
+        - uses: actions/github-script@v7
+          with:
+            script: |
+              const { owner, repo } = context.repo;
+              const { number: issue_number } = context.issue;
+              const { readdir, readFile } = require('fs').promises;
+              const utf8 = { encoding: 'utf-8' };
+              const lines = [
+                '# Release plan', '',
+                '| Directory | Previous version | New version |',
+                '|--|--|--|',
+              ];
+              const sections = [];
+              for (const folder of await readdir('outputs', { withFileTypes: true })) {
+                if (!folder.isDirectory()) continue;
+                const readText = (name) => readFile(name, utf8).then(x => x.trim());
+                lines.push('| '+[
+                  `\`${folder.name}\``,
+                  `${await readText(`outputs/${folder.name}/previous-version.txt`)}`,
+                  `**${await readText(`outputs/${folder.name}/new-version.txt`)}**`,
+                ].join(' | ')+' |');
+                sections.push(`<details><summary>Changelog preview: ${folder.name}</summary>\n\n${await readText(`outputs/${folder.name}/changelog.md`)}\n</details>`);
+              }
+              const finalBody = [lines.join('\n'), ...sections].join('\n\n');
+              const {data: allComments} = await github.rest.issues.listComments({ issue_number, owner, repo });
+              const ourComments = allComments
+                .filter(comment => comment.user.login === 'github-actions[bot]')
+                .filter(comment => comment.body.startsWith(lines[0]+'\n'));
+              const latestComment = ourComments.slice(-1)[0];
+              if (latestComment && latestComment.body === finalBody) {
+                console.log('Existing comment is already up to date.');
+                return;
+              }
+              const {data: newComment} = await github.rest.issues.createComment({ issue_number, owner, repo, body: finalBody });
+              console.log('Posted comment', newComment.id, '@', newComment.html_url);
+              // Delete all our previous comments
+              for (const comment of ourComments) {
+                if (comment.id === newComment.id) continue;
+                console.log('Deleting previous PR comment from', comment.created_at);
+                await github.rest.issues.deleteComment({ comment_id: comment.id, owner, repo });
+              }
 
-trigger-release:
+  trigger-release:
     needs: [detect, plan]
     if: needs.detect.outputs.is-merge-event == 'true'
     runs-on: ubuntu-latest
