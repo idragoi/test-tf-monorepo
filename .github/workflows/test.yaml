@@ -4,15 +4,15 @@ concurrency:
   group: ${{ github.head_ref }}
   cancel-in-progress: true
 
-env:
-  tfVer: '1.7.4'
-  tflintVer: 'v0.50.3'
-
 on: 
   pull_request:
     types: [opened, synchronize, reopened, labeled, closed]
     branches:
       - 'main'
+
+env:
+  TF_VERSION: '1.7.4'
+  TF_LINT_VERSION: 'v0.50.3'
 
 jobs:
   detect:
@@ -82,7 +82,7 @@ jobs:
         fail-fast: false
       uses: ./.github/workflows/reusable-validate.yaml
       with:
-        terraformVersion: ${{ env.tfVer }}
+        terraformVersion: ${{ env.TF_VERSION }}
         moduleRootDirectory: ${{ matrix.directory }}
       secrets:
         appId: ${{ secrets.appId }}
@@ -97,7 +97,7 @@ jobs:
       uses: ./.github/workflows/reusable-lint.yaml
       with:
         moduleRootDirectory: ${{ matrix.directory }}
-        tflintVersion: ${{ env.tflintVer }}
+        tflintVersion: ${{ env.TF_LINT_VERSION }}
       secrets:
         githubToken: ${{ secrets.GITHUB_TOKEN }}
 
