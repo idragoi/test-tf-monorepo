@@ -1,5 +1,4 @@
-name: GitHub Actions Demo
-run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+name: 'Terraform module release'
 concurrency: 
   group: ${{ github.head_ref }}
   cancel-in-progress: true
@@ -11,8 +10,8 @@ on:
       - 'main'
 
 env:
-  TF_VERSION: '1.7.4'
-  TF_LINT_VERSION: 'v0.50.3'
+  TF_VERSION: '1.9.4'
+  TF_LINT_VERSION: 'v0.53.0'
 
 jobs:
   detect:
@@ -25,12 +24,14 @@ jobs:
         ${{ github.event_name == 'pull_request'
          && github.event.action == 'closed'
          && github.event.pull_request.merged == true }}
+      tfVersion: ${{ env.TF_VERSION }}
+      tflintVersion: ${{ env.TF_LINT_VERSION }}
     steps:
       - name: Check PR labels
         id: check_pr_label
         env:
           PR_URL: ${{github.event.pull_request.html_url}}
-          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           LABELS=$(gh pr view $PR_URL --json labels  --jq '.labels[]| select((.name=="minor") or (.name=="major") or (.name=="patch") or (.name=="no-release")) |.name')
           NUMBER_OF_LABELS=$(echo "$LABELS" |wc -w)
@@ -82,7 +83,7 @@ jobs:
         fail-fast: false
       uses: ./.github/workflows/reusable-validate.yaml
       with:
-        terraformVersion: ${{ env.TF_VERSION }}
+        terraformVersion: ${{ needs.detect.outputs.tfVersion }}
         moduleRootDirectory: ${{ matrix.directory }}
       secrets:
         appId: ${{ secrets.appId }}
@@ -97,7 +98,7 @@ jobs:
       uses: ./.github/workflows/reusable-lint.yaml
       with:
         moduleRootDirectory: ${{ matrix.directory }}
-        tflintVersion: ${{ env.TF_LINT_VERSION }}
+        tflintVersion: ${{ needs.detect.outputs.tflintVersion }}
       secrets:
         githubToken: ${{ secrets.GITHUB_TOKEN }}
 
@@ -161,7 +162,7 @@ jobs:
                   `${await readText(`outputs/${folder.name}/previous-version.txt`)}`,
                   `**${await readText(`outputs/${folder.name}/new-version.txt`)}**`,
                 ].join(' | ')+' |');
-                sections.push(`<details><summary>Changelog preview: ${folder.name}</summary>\n\n${await readText(`outputs/${folder.name}/changelog.md`)}\n</details>`);
+                // sections.push(`<details><summary>Changelog preview: ${folder.name}</summary>\n\n${await readText(`outputs/${folder.name}/changelog.md`)}\n</details>`);
               }
               const finalBody = [lines.join('\n'), ...sections].join('\n\n');
               const {data: allComments} = await github.rest.issues.listComments({ issue_number, owner, repo });
@@ -228,37 +229,3 @@ jobs:
               event_type: 'monorepo_release',
               client_payload: payload,
             });
-
-
-
-
-# jobs:
-#   if_merged:
-#     if: github.event.pull_request.merged == true
-#     runs-on: ubuntu-latest
-#     steps:
-#     - run: echo The PR was merged
-#     - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
-#     - name: Check out repository code
-#       uses: actions/checkout@v4
-#     - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
-#     - run: echo "🖥️ The workflow is now ready to test your code on the runner."
-#     - name: List files in the repository
-#       run: |
-#         ls ${{ github.workspace }}
-  # Explore-GitHub-Actions:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
-  #     - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
-  #     - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
-  #     - name: Check out repository code
-  #       uses: actions/checkout@v4
-  #     - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
-  #     - run: echo "🖥️ The workflow is now ready to test your code on the runner."
-  #     - name: List files in the repository
-  #       run: |
-  #         ls ${{ github.workspace }}
-  #         echo ${{ github.workspace }}
-  #         pwd ${{ github.workspace }}
-  #     - run: echo "🍏 This job's status is ${{ job.status }}."

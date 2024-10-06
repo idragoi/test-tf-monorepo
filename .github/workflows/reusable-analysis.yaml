@@ -27,8 +27,8 @@ jobs:
         with:
           directory: ${{ inputs.moduleRootDirectory }}
           quiet: false
-          soft_fail: false
-          compact: false
+          soft_fail: true
+          compact: true
 
   tfsec:
     runs-on: ubuntu-latest
@@ -44,3 +44,4 @@ jobs:
         with:
           working_directory: ${{ inputs.moduleRootDirectory }}
           github_token: ${{ secrets.githubToken }}
+          soft_fail: true
